@@ -44,34 +44,35 @@ def init_gee():
         return False
     try:
         import ee
+        import tempfile
 
-        key_data = None
+        # JSONをパース
         if isinstance(GEE_KEY_JSON, dict):
             key_data = GEE_KEY_JSON
-        elif isinstance(GEE_KEY_JSON, str):
-            # 前後の空白・改行を除去してからパース
-            cleaned = GEE_KEY_JSON.strip()
-            key_data = json.loads(cleaned)
-        
-        logger.info(f"✅ GEE key parsed, type: {key_data.get('type')}")
-        logger.info(f"✅ GEE account: {key_data.get('client_email')}")
+        else:
+            key_data = json.loads(GEE_KEY_JSON.strip())
+
+        logger.info(f"✅ key_data type: {key_data.get('type')}")
+
+        # key_dataではなく一時ファイル経由で渡す
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.json', delete=False
+        ) as f:
+            json.dump(key_data, f)
+            key_file = f.name
 
         credentials = ee.ServiceAccountCredentials(
             email=GEE_SERVICE_ACCOUNT,
-            key_data=key_data,
+            key_file=key_file,
         )
         ee.Initialize(credentials)
         GEE_ENABLED = True
         logger.info("✅ Google Earth Engine initialized")
         return True
-    except json.JSONDecodeError as e:
-        logger.error(f"❌ JSON parse error: {e}")
-        logger.error(f"   Raw length: {len(GEE_KEY_JSON)}")
-        logger.error(f"   First 200 chars: {GEE_KEY_JSON[:200]}")
-        logger.error(f"   Last 50 chars: {GEE_KEY_JSON[-50:]}")
-        return False
     except Exception as e:
         logger.error(f"❌ GEE init failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 # ========== アプリ初期化 ==========
