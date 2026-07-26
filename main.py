@@ -45,14 +45,20 @@ def init_gee():
     try:
         import ee
 
-        # 文字列またはdictの両方に対応
-        if isinstance(GEE_KEY_JSON, str):
+        # RenderはJSON環境変数をdictに自動変換する場合がある
+        if isinstance(GEE_KEY_JSON, dict):
+            key_data = GEE_KEY_JSON
+        elif isinstance(GEE_KEY_JSON, str):
+            # 文字列の場合はパース
             key_data = json.loads(GEE_KEY_JSON)
         else:
-            key_data = GEE_KEY_JSON
+            # その他の場合は文字列に変換してパース
+            key_data = json.loads(str(GEE_KEY_JSON))
 
+        # key_fileではなくkey_dataを使用
         credentials = ee.ServiceAccountCredentials(
-            GEE_SERVICE_ACCOUNT, key_data=key_data
+            email=GEE_SERVICE_ACCOUNT,
+            key_data=key_data,
         )
         ee.Initialize(credentials)
         GEE_ENABLED = True
@@ -60,6 +66,8 @@ def init_gee():
         return True
     except Exception as e:
         logger.error(f"❌ GEE init failed: {e}")
+        logger.error(f"   GEE_KEY_JSON type: {type(GEE_KEY_JSON)}")
+        logger.error(f"   GEE_KEY_JSON preview: {str(GEE_KEY_JSON)[:100]}")
         return False
 
 # ========== アプリ初期化 ==========
