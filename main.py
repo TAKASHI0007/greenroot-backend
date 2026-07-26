@@ -99,6 +99,17 @@ security = HTTPBearer(auto_error=False)
 async def startup_event():
     init_gee()
 
+# main.py に追加（テスト用・後で削除可）
+@app.get("/api/satellite/test")
+async def satellite_test(
+    lat:  float = 39.8136,
+    lon:  float = 44.5152,
+    days: int   = 30,
+):
+    """認証なしでGEEテスト（開発用）"""
+    data = calculate_ndvi_gee(lat, lon, days)
+    return data
+
 # ========== インメモリDB ==========
 _users:       Dict[str, dict] = {}
 _detections:  List[dict]      = []
