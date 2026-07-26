@@ -45,17 +45,17 @@ def init_gee():
     try:
         import ee
 
-        # RenderはJSON環境変数をdictに自動変換する場合がある
+        key_data = None
         if isinstance(GEE_KEY_JSON, dict):
             key_data = GEE_KEY_JSON
         elif isinstance(GEE_KEY_JSON, str):
-            # 文字列の場合はパース
-            key_data = json.loads(GEE_KEY_JSON)
-        else:
-            # その他の場合は文字列に変換してパース
-            key_data = json.loads(str(GEE_KEY_JSON))
+            # 前後の空白・改行を除去してからパース
+            cleaned = GEE_KEY_JSON.strip()
+            key_data = json.loads(cleaned)
+        
+        logger.info(f"✅ GEE key parsed, type: {key_data.get('type')}")
+        logger.info(f"✅ GEE account: {key_data.get('client_email')}")
 
-        # key_fileではなくkey_dataを使用
         credentials = ee.ServiceAccountCredentials(
             email=GEE_SERVICE_ACCOUNT,
             key_data=key_data,
@@ -64,10 +64,14 @@ def init_gee():
         GEE_ENABLED = True
         logger.info("✅ Google Earth Engine initialized")
         return True
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON parse error: {e}")
+        logger.error(f"   Raw length: {len(GEE_KEY_JSON)}")
+        logger.error(f"   First 200 chars: {GEE_KEY_JSON[:200]}")
+        logger.error(f"   Last 50 chars: {GEE_KEY_JSON[-50:]}")
+        return False
     except Exception as e:
         logger.error(f"❌ GEE init failed: {e}")
-        logger.error(f"   GEE_KEY_JSON type: {type(GEE_KEY_JSON)}")
-        logger.error(f"   GEE_KEY_JSON preview: {str(GEE_KEY_JSON)[:100]}")
         return False
 
 # ========== アプリ初期化 ==========
