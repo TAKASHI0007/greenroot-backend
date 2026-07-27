@@ -107,7 +107,9 @@ async def satellite_test(
     days: int   = 30,
 ):
     """認証なしでGEEテスト（開発用）"""
+    logger.info(f"🔍 GEE_ENABLED at request time: {GEE_ENABLED}")
     data = calculate_ndvi_gee(lat, lon, days)
+    data['gee_enabled_flag'] = GEE_ENABLED  # デバッグ用
     return data
 
 # ========== インメモリDB ==========
@@ -248,12 +250,8 @@ def _mock_satellite(lat: float, lon: float, days: int = 30) -> dict:
         'timestamp':   datetime.utcnow().isoformat(),
     }
 
-def calculate_ndvi_gee(
-    latitude:  float,
-    longitude: float,
-    days_back: int = 30,
-) -> dict:
-    """GEE で Sentinel-2 NDVI/NDWI/EVI/NDRE/BSI を計算"""
+def calculate_ndvi_gee(latitude, longitude, days_back=30):
+    logger.info(f"🔍 calculate_ndvi_gee called, GEE_ENABLED={GEE_ENABLED}")
     if not GEE_ENABLED:
         return _mock_satellite(latitude, longitude, days_back)
     try:
