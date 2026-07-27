@@ -261,8 +261,27 @@ def calculate_ndvi_gee(latitude, longitude, days_back=30):
         point = ee.Geometry.Point([longitude, latitude])
         aoi   = point.buffer(5000)
 
-        logger.info(f"📡 Searching Sentinel-2: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+        logger.info(f"📡 Searching: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
 
+        # オリジナルコレクション（プロパティ取得用）
+        col_original = (
+            ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+            .filterBounds(aoi)
+            .filterDate(
+                start_date.strftime('%Y-%m-%d'),
+                end_date.strftime('%Y-%m-%d'),
+            )
+            .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30))
+        )
+
+        count = col_original.size().getInfo()
+        logger.info(f"📡 GEE: {count} images found")
+
+        if count == 0:
+            logger.warning("⚠️ No images found, using mock")
+            return _mock_satellite(latitude, longitude, days_back)
+
+        # 雲マスク済みコレクション（NDVI計算用）
         def mask_clouds(image):
             qa = image.select('QA60')
             mask = (
@@ -271,32 +290,17 @@ def calculate_ndvi_gee(latitude, longitude, days_back=30):
             )
             return image.updateMask(mask).divide(10000)
 
-        col = (
-            ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-            .filterBounds(aoi)
-            .filterDate(
-                start_date.strftime('%Y-%m-%d'),
-                end_date.strftime('%Y-%m-%d'),
-            )
-            .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30))
-            .map(mask_clouds)
-        )
-        count = col.size().getInfo()
-        logger.info(f"📡 GEE: {count} images found")
+        col_masked = col_original.map(mask_clouds)
+        composite  = col_masked.median()
 
-        if count == 0:
-            logger.warning("⚠️ No images found, using mock")
-            return _mock_satellite(latitude, longitude, days_back)
-
-
-        composite = col.median()
+        # 指標計算
         ndvi = composite.normalizedDifference(['B8', 'B4']).rename('NDVI')
         ndwi = composite.normalizedDifference(['B3', 'B8']).rename('NDWI')
         ndre = composite.normalizedDifference(['B8A', 'B5']).rename('NDRE')
         evi  = composite.expression(
             '2.5*((NIR-RED)/(NIR+6*RED-7.5*BLUE+1))',
-            {'NIR': composite.select('B8'),
-             'RED': composite.select('B4'),
+            {'NIR':  composite.select('B8'),
+             'RED':  composite.select('B4'),
              'BLUE': composite.select('B2')},
         ).rename('EVI')
         bsi = composite.expression(
@@ -315,10 +319,13 @@ def calculate_ndvi_gee(latitude, longitude, days_back=30):
             maxPixels=1e9,
         ).getInfo()
 
-        latest       = col.sort('system:time_start', False).first()
+        # 日付と雲量はオリジナルから取得
+        latest       = col_original.sort('system:time_start', False).first()
         latest_date  = latest.date().format('YYYY-MM-dd').getInfo()
         latest_cloud = latest.get('CLOUDY_PIXEL_PERCENTAGE').getInfo()
         ndvi_val     = stats.get('NDVI', 0.0) or 0.0
+
+        logger.info(f"✅ NDVI={ndvi_val:.3f}, date={latest_date}, cloud={latest_cloud}")
 
         return {
             'source':      'Google Earth Engine / Sentinel-2',
@@ -337,10 +344,11 @@ def calculate_ndvi_gee(latitude, longitude, days_back=30):
             'period_days': days_back,
             'timestamp':   datetime.utcnow().isoformat(),
         }
+
     except Exception as e:
-        logger.error(f"❌ GEE error: {e}")
+        logger.error(f"❌ GEE calculation error: {e}")
         import traceback
-        logger.error(traceback.format_exc())  # ← スタックトレースを追加
+        logger.error(traceback.format_exc())
         return _mock_satellite(latitude, longitude, days_back)
 
 # ========== Health ==========
