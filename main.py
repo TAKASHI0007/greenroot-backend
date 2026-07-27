@@ -259,7 +259,9 @@ def calculate_ndvi_gee(latitude, longitude, days_back=30):
         end_date   = datetime.utcnow()
         start_date = end_date - timedelta(days=days_back)
         point = ee.Geometry.Point([longitude, latitude])
-        aoi   = point.buffer(5000)  # 5km バッファ
+        aoi   = point.buffer(5000)
+
+        logger.info(f"📡 Searching Sentinel-2: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
 
         def mask_clouds(image):
             qa = image.select('QA60')
@@ -280,9 +282,12 @@ def calculate_ndvi_gee(latitude, longitude, days_back=30):
             .map(mask_clouds)
         )
         count = col.size().getInfo()
-        logger.info(f"📡 GEE: {count} images ({latitude:.4f}, {longitude:.4f})")
+        logger.info(f"📡 GEE: {count} images found")
+
         if count == 0:
+            logger.warning("⚠️ No images found, using mock")
             return _mock_satellite(latitude, longitude, days_back)
+
 
         composite = col.median()
         ndvi = composite.normalizedDifference(['B8', 'B4']).rename('NDVI')
@@ -334,6 +339,8 @@ def calculate_ndvi_gee(latitude, longitude, days_back=30):
         }
     except Exception as e:
         logger.error(f"❌ GEE error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())  # ← スタックトレースを追加
         return _mock_satellite(latitude, longitude, days_back)
 
 # ========== Health ==========
